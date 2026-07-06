@@ -20,6 +20,14 @@ if ! curl -sf --max-time 2 http://localhost:11434/api/version >/dev/null 2>&1; t
   exit 1
 fi
 
+# Auto-pull/create the model if missing (helper lives next to this script)
+SRC="$0"
+while [ -L "$SRC" ]; do SRC="$(readlink "$SRC")"; done
+ENSURE="$(cd "$(dirname "$SRC")" && pwd)/cc-ensure-model"
+if [ -x "$ENSURE" ]; then
+  "$ENSURE" "$MODEL" || exit 1
+fi
+
 # MCP allowlist (context7 + repomix only) when installed by setup
 MCP_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/local-llm-dev/mcp-local.json"
 if [ -f "$MCP_CONF" ]; then

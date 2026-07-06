@@ -12,6 +12,11 @@ function cc-local --description "Claude Code against local Ollama (Anthropic-com
         return 1
     end
 
+    # Auto-pull/create the model if it doesn't exist yet (first use = big download).
+    if command -q cc-ensure-model
+        cc-ensure-model $model; or return 1
+    end
+
     # MCP allowlist: only context7 (docs lookup) + repomix run in local mode — no other
     # MCP servers get your code. --strict-mcp-config ignores all other MCP configs.
     set -l mcp_flags

@@ -26,6 +26,10 @@ cc-local() {
     echo "cc-local: Ollama not reachable on :11434 — start it first" >&2
     return 1
   fi
+  # Auto-pull/create the model if it doesn't exist yet (first use = big download).
+  if command -v cc-ensure-model >/dev/null 2>&1; then
+    cc-ensure-model $model || return 1
+  fi
   local -a mcp
   mcp=(${(z)$(_llmdev_mcp_flags)})
   ANTHROPIC_BASE_URL=http://localhost:11434 \
@@ -88,6 +92,9 @@ cc-mode() {
       if ! _llmdev_ollama_up; then
         echo "cc-mode: Ollama not reachable on :11434 — start it first" >&2
         return 1
+      fi
+      if command -v cc-ensure-model >/dev/null 2>&1; then
+        cc-ensure-model $model || return 1
       fi
       export ANTHROPIC_BASE_URL=http://localhost:11434
       export ANTHROPIC_AUTH_TOKEN=ollama

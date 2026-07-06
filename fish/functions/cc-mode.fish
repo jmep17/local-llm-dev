@@ -15,6 +15,9 @@ function cc-mode --description "Toggle plain 'claude' between cloud and local Ol
                 echo "cc-mode: Ollama not reachable on :11434 — start it first" >&2
                 return 1
             end
+            if command -q cc-ensure-model
+                cc-ensure-model $model; or return 1
+            end
             set -gx ANTHROPIC_BASE_URL http://localhost:11434
             set -gx ANTHROPIC_AUTH_TOKEN ollama
             set -gx ANTHROPIC_API_KEY ""

@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# cc-ensure-model <name> — make sure an Ollama model exists before launch.
+#
+# - already exists            -> exit 0, silent
+# - has models/<name>.Modelfile in this repo -> pull its FROM base (if missing),
+#                                then `ollama create` the derived model
+# - anything else             -> plain `ollama pull <name>`
+#
+# Called automatically by cc-local / cc-mode / claude-local so "model may not
+# exist" errors self-heal. First use of a model = one big download; progress
+# shows in the terminal.
+set -euo pipefail
+
+[ $# -ge 1 ] || { echo "usage: cc-ensure-model <model>" >&2; exit 1; }
+MODEL="$1"
+
+ollama show "$MODEL" >/dev/null 2>&1 && exit 0
+
+# resolve symlinks to find the repo (installed as ~/.local/bin/cc-ensure-model)
+SRC="${BASH_SOURCE[0]}"
+while [ -L "$SRC" ]; do SRC="$(readlink "$SRC")"; done
+REPO="$(cd "$(dirname "$SRC")/.." && pwd)"
+MODELFILE="$REPO/models/$MODEL.Modelfile"
+
+if [ -f "$MODELFILE" ]; then
+  BASE="$(awk '/^FROM[[:space:]]/{print $2; exit}' "$MODELFILE")"
+  if ! ollama show "$BASE" >/dev/null 2>&1; then
+    echo "cc-ensure-model: pulling base $BASE (one-time, several GB)..." >&2
+    ollama pull "$BASE"
+  fi
+  echo "cc-ensure-model: creating $MODEL from $BASE" >&2
+  ollama create "$MODEL" -f "$MODELFILE"
+else
+  echo "cc-ensure-model: pulling $MODEL..." >&2
+  ollama pull "$MODEL"
+fi

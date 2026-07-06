@@ -1,255 +1,239 @@
 # local-llm-dev
 
-Full-stack (frontend-heavy) development on **local models** with Claude Code and OpenCode.
-No proxies: Ollama ≥ 0.14 speaks the
-[Anthropic Messages API natively](https://ollama.com/blog/claude), so Claude Code talks to it
-directly via `ANTHROPIC_BASE_URL`. Designed to coexist with an existing Claude Code setup —
-your `~/.claude/settings.json` and login are never touched; local mode is opt-in per
-invocation, per shell session, or per project.
+Run **Claude Code and OpenCode on local models** (Ollama) for full-stack development.
 
-## Swapping cloud ↔ local
+- **No proxy.** Ollama ≥ 0.14 speaks the [Anthropic API natively](https://ollama.com/blog/claude) — Claude Code just points at `localhost:11434`.
+- **No conflict with your existing setup.** Local mode is opt-in per command, per shell, or per project. Your `~/.claude` settings and login are never touched.
+- **Tuned for real work.** Strips the Claude Code defaults that cripple local models (a cache-busting attribution header alone makes inference ~90% slower), and ships a context system that fits a codebase into a 64k window.
 
-Three swap scopes — pick per situation:
+---
 
-| Scope | How | Back to cloud |
-|---|---|---|
-| One invocation | `cc-qwen` / `cc-local <model>` / `bin/claude-local` | just run plain `claude` |
-| Current shell | `cc-mode local [model]` — plain `claude` now hits Ollama | `cc-mode cloud` (or new terminal) |
-| One project | copy `config/claude-settings.local.json` → `<repo>/.claude/settings.local.json` | delete the file |
-
-`cc-mode status` shows which mode a shell is in. All three only set env vars
-(`ANTHROPIC_BASE_URL` etc.) — nothing writes to your global Claude config, so your work
-login/settings survive intact. `bin/claude-local` is POSIX sh for machines without fish
-(symlink onto PATH).
-
-## What's here
-
-```
-models/            Modelfiles — derived models with num_ctx baked in
-fish/functions/    cc-local, cc-qwen, cc-gemma, oc-local, ollama-tuned
-config/            opencode.json + per-project .claude/settings.local.json template
-templates/         AGENTS.local.md (compact project context) + portless.json
-scripts/           setup.fish (installer) + repomap.sh (context compressor)
-```
-
-## Model matrix — pick by RAM (one model loaded at a time)
-
-Default set (fits 16 GB):
-
-| Model | Base tag | Size | Ctx | Role |
-|---|---|---|---|---|
-| `qwen3.5-dev` | `qwen3.5:9b` (q4_K_M) | 6.6 GB | 64k | Main agent — tools, thinking, vision. Opus/Sonnet tier. |
-| `qwen3.5-fast` | `qwen3.5:4b` | 3.4 GB | 32k | Haiku tier / OpenCode `small_model` — titles, quick edits. |
-| `gemma4-vision` | `gemma4:e4b-it-qat` | 6.1 GB | 32k | Frontend screenshot review (multimodal, QAT quant). |
-
-More RAM (e.g. a beefier work machine) → bigger main agent; `setup.fish` creates these
-automatically if the base tag is pulled:
-
-| RAM | Pull | Derived model | Notes |
-|---|---|---|---|
-| 32 GB | `qwen3.5:27b` (17 GB) | `qwen3.5-dev-27b` | strongest dense coder that fits; Apple Silicon alt: `27b-coding-nvfp4` |
-| 48–64 GB | `qwen3.5:35b-a3b` (24 GB) | `qwen3.5-dev-35b` | MoE, 3B active — near-27b quality, much faster |
-| 64 GB+ | `gemma4:31b` (20 GB) | — | 256k ctx, strong reasoning; make own Modelfile if wanted |
-
-Use them via `cc-local qwen3.5-dev-27b`, `cc-mode local qwen3.5-dev-27b`, or edit the
-defaults in the wrappers. On 16 GB, 27b+ models don't fit with an agent-sized KV cache. Qwen 3.5 carries the
-`tools thinking vision` capability tags ([qwen3.5 tags](https://ollama.com/library/qwen3.5/tags));
-agentic tool-calling is the hard requirement for Claude Code/OpenCode. Gemma 4 E4B-QAT is the
-cheapest capable multimodal option ([gemma4 tags](https://ollama.com/library/gemma4/tags)) — paste
-UI screenshots at it. If a task outgrows the hardware, `qwen3.5:397b-cloud` / `gemma4:cloud` are
-drop-in Ollama cloud tags.
-
-KV cache is the hidden memory cost: the server tuning (`ollama-tuned` /
-`launchctl setenv` in setup) sets `OLLAMA_KV_CACHE_TYPE=q8_0` + flash attention, which roughly
-halves KV memory and is what makes 64k context viable next to a 6.6 GB model.
-
-## Install
-
-Fish (personal Mac):
-
-```fish
-./scripts/setup.fish --pull --portless   # ~16 GB of downloads
-```
-
-Zsh/bash (work PC — no fish needed):
+## Quick start
 
 ```sh
-./scripts/setup.sh --pull --portless
-# then add to ~/.zshrc (setup prints the exact line):
+git clone https://github.com/jmep17/local-llm-dev && cd local-llm-dev
+
+# fish (personal Mac):
+./scripts/setup.fish              # pulls ~16 GB of models on first run
+
+# zsh/bash (work PC):
+./scripts/setup.sh
+# then add the line it prints to ~/.zshrc:
 #   source /path/to/local-llm-dev/shell/local-llm-dev.zsh
 ```
 
-`shell/local-llm-dev.zsh` ports every function — `cc-local`, `cc-qwen`, `cc-gemma`,
-`cc-turbo`, `oc-local`, `cc-mode`, `ollama-tuned` — with identical behavior.
-
-Then:
-
-```fish
-cc-qwen                  # Claude Code → qwen3.5-dev (64k, tools+thinking)
-cc-gemma                 # Claude Code → gemma4-vision (paste screenshots)
-cc-local <any-model>     # generic wrapper
-oc-local                 # OpenCode → ollama/qwen3.5-dev
-```
-
-To pin a whole project to local models without wrappers, copy
-`config/claude-settings.local.json` → `<project>/.claude/settings.local.json`.
-To go back to Anthropic cloud: just use plain `claude` (wrappers scope env to one invocation).
-
-## Overhead overrides — why local feels slow without them
-
-Claude Code ships defaults tuned for Anthropic's cloud. Three of them actively hurt local
-models; all are overridden in the wrappers, `cc-mode`, and the settings template:
-
-| Override | What it fixes |
-|---|---|
-| `CLAUDE_CODE_ATTRIBUTION_HEADER=0` (env) | **The big one.** Claude Code prepends an attribution/billing line to the system prompt whose value changes every request — so the KV cache misses on the whole prefix, every turn. [Measured ~90% slower inference on local models](http://www.mykolaaleksandrov.dev/posts/2026/06/claude-code-huge-prompt-investigation/); with it off, the stable prefix prefills once and is reused. |
-| `DISABLE_NON_ESSENTIAL_MODEL_CALLS=1` (env) | Background haiku-class calls (terminal titles, tips, flavor text). Harmless in the cloud; locally they queue behind your main model (`OLLAMA_NUM_PARALLEL=1`) and stall real work. [Env-var reference](https://code.claude.com/docs/en/env-vars). |
-| `API_TIMEOUT_MS=600000` (env) | Local prefill on big context is slow; default timeout can fire and retry — and a retry means paying the whole prefill again. |
-| `attribution: {"commit": "", "pr": ""}` ([settings](https://code.claude.com/docs/en/settings)) | Drops the Co-Authored-By/PR footer text (work-repo hygiene + a few fewer prompt tokens). `includeCoAuthoredBy` is deprecated — use the `attribution` object. |
-| `includeGitInstructions: false` (settings) | Removes the built-in commit/PR workflow instructions and per-request git-status snapshot from the system prompt — smaller and more cache-stable prefix. Trade-off: no built-in commit ceremony; AGENTS.md conventions cover it. |
-| `awaySummaryEnabled: false`, `CLAUDE_CODE_DISABLE_AGENT_VIEW=1` | More background model calls (away recap, agent supervisor view) — same stall problem as above. |
-| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` (env) | Telemetry/error-reporting/surveys. Caveat: [also disables the auto-updater](https://github.com/anthropics/claude-code/issues/53899) — update Claude Code manually on the work PC. |
-
-**System-prompt overrides (both wired in):**
-
-- `--exclude-dynamic-system-prompt-sections` — now the default in `cc-local`/`cc-qwen`/
-  `cc-gemma`/`bin/claude-local`, and `cc-mode local` shadows plain `claude` with it (env vars
-  can't carry CLI flags; `cc-mode cloud` removes the shadow). Moves per-request sections
-  (cwd, git status, env info) out of the system prompt into the first user message →
-  byte-stable prefix → KV-cache hit every turn. No behavior loss; ignored when a custom
-  system prompt is set.
-- **`cc-turbo [model]`** — replaces the ~10k-token harness prompt with
-  `templates/system-prompt.slim.md` (~200 tokens, installed to `~/.config/local-llm-dev/`)
-  via `--system-prompt-file`. Tool calling still works (tool schemas travel separately from
-  the system prompt); the measured effect of this class of swap is prefill dropping from
-  ~60s to ~2s on large local models. Trade-off: no built-in harness contract — the slim
-  prompt re-teaches essentials (repomap-first retrieval, targeted edits, verify-after-edit,
-  terse output) and defers the rest to AGENTS.md. Best on the 9b/4b models where prefill
-  dominates; prefer plain `cc-qwen` when you want full harness behavior.
-
-Also available but not defaulted: `claude --bare` strips hooks/plugins/MCP *and* CLAUDE.md —
-defeats the repomap strategy; one-off throwaway sessions only.
-
-**Locality guarantees (work-machine mode):** all wrappers and the `cc-mode` shadow pass
-`--strict-mcp-config --mcp-config ~/.config/local-llm-dev/mcp-local.json` — an MCP allowlist
-of exactly **context7** (docs lookup, remote by design) and **repomix** (local stdio). No other
-MCP server from your global config can receive code in local mode. The settings template also
-sets `"skipWebFetchPreflight": true` (WebFetch's domain safety check otherwise calls Anthropic
-even in local mode), and `repomap` auto-appends `.agents/` to the target repo's `.gitignore`
-so generated maps never land in history. Remaining outbound: npm package fetches on first use,
-OpenCode's models.dev catalog + update-notify pings, context7 queries. Model traffic itself is
-localhost-only — avoid `:cloud` Ollama tags on machines where that matters.
-
-OpenCode side (already in `config/opencode.json`): `"share": "disabled"` (no conversation
-uploads — work machine), `"autoupdate": "notify"`, and `"compaction": {"prune": true}` which
-drops old tool outputs instead of carrying them — the cheapest token savings available
-([OpenCode config reference](https://opencode.ai/docs/config/)). OpenCode has no git-attribution
-config key; if its commits need clean trailers, say so in AGENTS.md.
-
-## Context strategy — the important part
-
-Local models have 32–64k of real context vs Claude's 1M, and every wasted token also costs
-KV-cache RAM and prefill time. The setup uses three layers:
-
-1. **Tiny always-loaded file** — `templates/AGENTS.local.md` (~600 tokens hard budget).
-   Stack, commands, conventions, the portless URL, and *rules telling the model how to
-   retrieve context* instead of embedding context. Copy as `AGENTS.md`/`CLAUDE.md` per project.
-2. **Generated repo map** — `scripts/repomap.sh` writes `.agents/repomap.md`. Backed by
-   [repomix](https://repomix.com): tree-sitter `--compress` reduces every file to its
-   signatures (functions, classes, interfaces, types — with parameter/field types intact),
-   plus the directory tree and `package.json`. `output.tokenBudget: 8000` fails loudly if the
-   map outgrows its share of a 64k window, and secretlint scans the pack so no credentials
-   land in a prompt (work-machine relevant). First run seeds `repomix.config.json` from
-   `templates/` — tune its `include` globs per repo. The model reads this one file instead of
-   exploring — "scan the tree" (dozens of tool calls) becomes one read. Re-run after
-   structural changes. Caveats: `--compress` drops exported *consts* (keeps
-   functions/types/interfaces), and node-less machines fall back to a built-in grep generator
-   (TS/JS exports only, 16 KB cap).
-
-   **Regeneration is automatic.** Setup links the script as `~/.local/bin/repomap`; the
-   settings template wires a Claude Code `SessionStart` hook running `repomap --if-stale`
-   (no-op unless HEAD moved, and only in repos that opted in via `repomix.config.json`),
-   and `repomap --install-hook` adds git post-commit/post-merge/post-checkout hooks so the
-   map also stays fresh under OpenCode. Only gap: files created mid-session before any
-   commit — the AGENTS rules tell the model to run `repomap` after structural changes.
-3. **Retrieval on demand** — the AGENTS rules force grep-for-symbol → open-exact-path →
-   read-only-needed-ranges. Never whole directories. Your RTK hook compounds this by
-   token-filtering the shell commands the agent runs.
-
-Also: keep the prompt prefix static (stable CLAUDE.md, no timestamps) so Ollama's KV cache
-reuses the prefill across turns — that's most of the perceived speed on Apple Silicon.
-
-## Adding MCPs and skills
-
-Both installed to `~/.local/bin` by setup, work from any shell:
+Open a new shell, then:
 
 ```sh
-# MCP allowlist (what local mode may talk to — everything else stays blocked)
+cc-qwen        # Claude Code on a local model. That's it.
+```
+
+Setup is idempotent (re-run any time; skips what exists). `--no-pull` skips downloads —
+wrappers auto-pull any missing model on first use anyway. `--portless` also installs
+[portless](https://github.com/vercel-labs/portless) (see Frontend workflow).
+
+---
+
+## Daily use
+
+| Command | What it does |
+|---|---|
+| `cc-qwen` | Claude Code → `qwen3.5-dev` (the main local agent) |
+| `cc-turbo` | Same, but with a ~200-token system prompt instead of the ~10k harness prompt — fastest prefill |
+| `cc-gemma` | Claude Code → `gemma4-vision` — paste UI screenshots for visual review |
+| `cc-local <model>` | Claude Code → any Ollama model (auto-pulls if missing) |
+| `cc-mode local` / `cloud` / `status` | Make plain `claude` local for this shell / revert / check |
+| `oc-local` | OpenCode → local models |
+| `ollama-tuned` | Run the Ollama server with the right flags (see Performance) |
+| `repomap` | Regenerate the repo's context map (usually automatic — see Context) |
+| `cc-mcp` / `cc-skill` | Manage MCP allowlist / skills (see Extending) |
+
+**Switching cloud ↔ local** is just scope choice:
+
+| Scope | Local | Back to cloud |
+|---|---|---|
+| One command | `cc-qwen` etc. | run plain `claude` |
+| This shell | `cc-mode local` | `cc-mode cloud` or new terminal |
+| One project | copy `config/claude-settings.local.json` → `<repo>/.claude/settings.local.json` | delete that file |
+
+Everything is env-var scoped. Nothing writes to your global Claude config. On a work
+machine, pin work repos with the per-project file so forgetting `cc-mode` can't send code
+to the cloud.
+
+---
+
+## Models
+
+Default set fits **16 GB** (one model loaded at a time). Wrappers auto-pull/create any of
+these on first use; setup pre-pulls them.
+
+| Model | Base | Size | Ctx | Role |
+|---|---|---|---|---|
+| `qwen3.5-dev` | `qwen3.5:9b` | 6.6 GB | 64k | Main agent — tools, thinking, vision |
+| `qwen3.5-fast` | `qwen3.5:4b` | 3.4 GB | 32k | Background/haiku tier |
+| `gemma4-vision` | `gemma4:e4b-it-qat` | 6.1 GB | 32k | Screenshot review (multimodal) |
+
+More RAM → stronger main agent (`cc-local qwen3.5-dev-27b` auto-pulls it):
+
+| RAM | Model | Notes |
+|---|---|---|
+| 32 GB | `qwen3.5-dev-27b` | strongest dense coder; Apple Silicon alt: `27b-coding-nvfp4` |
+| 48 GB+ | `qwen3.5-dev-35b` | MoE, 3B active — near-27b quality, much faster |
+
+These are *derived models* (`models/*.Modelfile`): base + `num_ctx` baked in, because raw
+Ollama tags default to a context too small for agents. Tags: [qwen3.5](https://ollama.com/library/qwen3.5/tags) ·
+[gemma4](https://ollama.com/library/gemma4/tags). Avoid `:cloud` tags if code must stay local — those run on Ollama's servers.
+
+---
+
+## Performance: why this isn't slow
+
+Two things make local agents miserable: re-prefilling the prompt every turn, and background
+model calls. Both are handled.
+
+**KV-cache stability** (the prompt prefix must be byte-identical each turn, or the model
+re-processes everything):
+
+| Fix | Problem it solves |
+|---|---|
+| `CLAUDE_CODE_ATTRIBUTION_HEADER=0` | Claude Code prepends a per-request-changing line to the system prompt — [~90% slower on local models](http://www.mykolaaleksandrov.dev/posts/2026/06/claude-code-huge-prompt-investigation/) |
+| `--exclude-dynamic-system-prompt-sections` | cwd/git-status/env sections change per request; this moves them out of the prompt prefix |
+| `cc-turbo` | Replaces the ~10k-token harness prompt entirely (`--system-prompt-file`, ~200 tokens). Tool calling unaffected — schemas travel separately |
+| `ollama-tuned` / setup's `launchctl` env | `OLLAMA_KV_CACHE_TYPE=q8_0` + flash attention ≈ halves KV memory — what makes 64k ctx fit next to a 6.6 GB model in 16 GB |
+
+**No background stalls:**
+
+| Fix | Problem it solves |
+|---|---|
+| `DISABLE_NON_ESSENTIAL_MODEL_CALLS=1` | Titles/tips/flavor calls queue behind your one loaded model |
+| `awaySummaryEnabled: false`, `CLAUDE_CODE_DISABLE_AGENT_VIEW=1` | Two more background-call sources |
+| `API_TIMEOUT_MS=600000` | A timeout retry = paying slow prefill twice |
+| `attribution: {"commit":"","pr":""}`, `includeGitInstructions: false` | Smaller prompt; clean commits ([settings ref](https://code.claude.com/docs/en/settings)) |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` | Telemetry/surveys off. Side effect: [auto-updater off too](https://github.com/anthropics/claude-code/issues/53899) — update Claude Code manually |
+
+All of this is baked into the wrappers and `config/claude-settings.local.json` — nothing to
+remember. (`claude --bare` exists for max stripping but skips CLAUDE.md, which breaks the
+context system below — throwaway sessions only.)
+
+---
+
+## Context: fitting a codebase in 64k
+
+Local models have 32–64k of context vs the cloud's 1M. Three layers, per project:
+
+1. **AGENTS.md** (`templates/AGENTS.local.md`, ≤600 tokens) — stack, commands, conventions,
+   dev URL, and *rules for retrieving* context instead of embedding it: repo-map first,
+   grep for symbols, open exact paths, read only needed ranges, never cat directories.
+2. **Repo map** (`.agents/repomap.md`, ~8k-token budget) — generated by
+   [repomix](https://repomix.com): tree-sitter compression reduces every file to its
+   signatures, plus directory tree and dependencies. One read replaces dozens of
+   exploration tool calls. Secretlint scans the pack so credentials can't land in a prompt;
+   the map is auto-gitignored. First run seeds `repomix.config.json` — tune its `include`
+   globs per repo. (Known limit: compression keeps functions/classes/types but drops
+   exported consts. No node? A grep-based fallback generator runs instead.)
+3. **Grep on demand** — enforced by the AGENTS rules for everything else.
+
+**The map maintains itself:** a Claude Code `SessionStart` hook (in the settings template)
+and optional git hooks (`repomap --install-hook`) run `repomap --if-stale`, which
+regenerates only when git HEAD moved. Manual `repomap` only needed after creating files
+mid-session.
+
+Per-project setup: copy `templates/AGENTS.local.md` → `AGENTS.md`/`CLAUDE.md`, run
+`repomap`, done.
+
+---
+
+## Extending: MCPs and skills
+
+```sh
 cc-mcp list
-cc-mcp add linear https://mcp.linear.app/mcp        # remote HTTP
-cc-mcp add playwright npx -y @playwright/mcp        # local stdio
+cc-mcp add linear https://mcp.linear.app/mcp      # remote HTTP server
+cc-mcp add playwright npx -y @playwright/mcp      # local stdio server
 cc-mcp rm playwright
 
-# Skills
-cc-skill new my-review              # scaffold ~/.claude/skills/my-review/SKILL.md
-cc-skill new deploy --project       # scaffold into ./.claude/skills (this repo only)
-cc-skill add ~/some/skill-dir       # install a local skill dir
-cc-skill add https://github.com/user/skill-repo   # clone single skill or a collection
+cc-skill new my-review               # scaffold ~/.claude/skills/my-review/SKILL.md
+cc-skill new deploy --project        # scaffold into this repo only
+cc-skill add https://github.com/x/y  # install from git (single skill or collection)
 cc-skill list
 ```
 
-Changes take effect on the next launch. Two local-model budget rules: every allowlisted
-MCP server's *tool schemas* and every skill's *description line* load into each session's
-prompt — on a 64k model, a handful of fat MCP servers can eat 10%+ of the window, so keep
-the allowlist to what you use and write one-line skill descriptions. Adding a remote MCP
-(like linear above) is also an explicit locality decision: that server receives whatever
-the model sends it.
+Local mode runs **only** MCP servers on the allowlist (`--strict-mcp-config`) — default is
+context7 (docs lookup) + repomix. Two budget rules for 64k models: every MCP server's tool
+schemas and every skill's description line load into each session's prompt, so keep both
+lists short. Adding a remote MCP is a locality decision — that server receives what the
+model sends it.
 
-## Frontend loop with portless
+---
 
-[Portless](https://github.com/vercel-labs/portless) (Vercel Labs) replaces `localhost:3000`
-with stable named URLs — built explicitly for agents:
+## Frontend workflow (portless)
 
-```fish
-portless trust                 # once: local HTTPS
-cd myapp
-portless next dev              # → https://myapp.localhost
-# or in package.json: "dev": "portless run next dev"
+[Portless](https://github.com/vercel-labs/portless) (Vercel Labs) gives dev servers stable
+named URLs instead of ports:
+
+```sh
+portless trust            # once — local HTTPS
+portless next dev         # → https://myapp.localhost
 ```
 
-Why it matters here:
-- **Stable URL in AGENTS.md** — the model always knows where the app runs; no port guessing,
-  no "is it 3000 or 3001 today". The template bakes it in.
-- **Worktree isolation** — branch `fix-ui` → `https://fix-ui.myapp.localhost`. Run agents in
-  parallel worktrees, each app on its own deterministic URL.
-- **Verify loop** — `curl -sk https://myapp.localhost` for smoke checks; screenshot the URL and
-  paste into `cc-gemma` for visual review (Qwen 3.5 also accepts images).
+Why it matters for agents: the URL is deterministic, so it lives in AGENTS.md and the model
+always knows where the app runs; git worktree branches get their own URL
+(`https://fix-ui.myapp.localhost`) so parallel agents don't collide; and the verify loop is
+trivial — `curl -sk https://myapp.localhost` for smoke checks, screenshot → paste into
+`cc-gemma` for visual review. Copy `templates/portless.json`, set `name`.
 
-Copy `templates/portless.json` into the project and set `name`.
+Note: portless is pre-1.0 and installs a root-owned launchd service (port 443) — check
+policy before sudo-installing on a work machine.
+
+---
 
 ## OpenCode
 
-`config/opencode.json` (installed to `~/.config/opencode/` by setup) registers the three models
-under an `ollama` provider via `@ai-sdk/openai-compatible` against `http://127.0.0.1:11434/v1`,
-with context limits declared so OpenCode's compaction triggers correctly. `qwen3.5-dev` is the
-default `model`, `qwen3.5-fast` the `small_model`. Docs:
-[OpenCode providers](https://opencode.ai/docs/providers/), [Ollama × OpenCode](https://docs.ollama.com/integrations/opencode).
+`config/opencode.json` (installed by setup) registers all models via
+`@ai-sdk/openai-compatible` → `127.0.0.1:11434/v1` with correct context limits, plus
+`share: "disabled"` (no conversation uploads), `autoupdate: "notify"`, and
+`compaction.prune` (drops old tool outputs). Docs: [providers](https://opencode.ai/docs/providers/) ·
+[Ollama × OpenCode](https://docs.ollama.com/integrations/opencode). If you already have an
+OpenCode config, setup writes `opencode.local-models.json` next to it for manual merge
+instead of overwriting.
+
+---
+
+## Is it 100% local?
+
+Model traffic (prompts, code, completions) never leaves `localhost`. Remaining outbound, by
+design: npm package fetches on first use, OpenCode's models.dev catalog + update-notify
+pings, and context7 doc queries (allowlisted deliberately). WebFetch's phone-home domain
+check is disabled (`skipWebFetchPreflight`). Cloud mode (`claude` without local pinning) is
+normal Anthropic traffic — that's the point of the swap.
+
+---
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| `Unable to connect to API (ConnectionRefused)` in plain `claude` | Stale `ANTHROPIC_BASE_URL` in env — `set -e ANTHROPIC_BASE_URL` |
-| Model ignores tools / truncates early | Context fell back to a small default — use the derived models (`num_ctx` baked in), not raw tags |
-| OpenCode "missing API key" | `options.apiKey: "ollama"` must stay in the provider block (dummy value; Ollama ignores it) |
-| Everything slow, fans spinning | Two models loaded — `OLLAMA_MAX_LOADED_MODELS=1` (set by `ollama-tuned`/setup), and don't run cc-qwen + cc-gemma simultaneously |
-| Safari can't open `*.localhost` | `portless hosts sync` (Chrome/Firefox/Edge resolve it natively) |
-| Docker container can't reach Ollama | `OLLAMA_HOST=0.0.0.0:11434 ollama serve` |
+| "model may not exist" on first run | It's downloading — wrappers auto-pull; watch the terminal. Or run setup once. |
+| `ConnectionRefused` in plain `claude` | Stale local env — `cc-mode cloud`, or new terminal |
+| Model ignores tools / truncates early | Using a raw tag with default (tiny) context — use the derived models |
+| OpenCode "missing API key" | Keep `apiKey: "ollama"` in the provider options (dummy; Ollama ignores it) |
+| Everything slow, fans on | Two models loaded — don't run cc-qwen and cc-gemma at once (`OLLAMA_MAX_LOADED_MODELS=1` guards this) |
+| Safari can't open `*.localhost` | `portless hosts sync` |
+| Docker can't reach Ollama | `OLLAMA_HOST=0.0.0.0:11434 ollama serve` |
+
+---
+
+## Repo layout
+
+```
+bin/               claude-local (POSIX wrapper), cc-mcp, cc-skill, cc-ensure-model
+config/            opencode.json, claude-settings.local.json (per-project pin), mcp-local.json
+fish/functions/    cc-local, cc-qwen, cc-gemma, cc-turbo, cc-mode, oc-local, ollama-tuned
+shell/             local-llm-dev.zsh — zsh port of all functions
+models/            Modelfiles (base + num_ctx) for the derived models
+scripts/           setup.fish, setup.sh, repomap.sh
+templates/         AGENTS.local.md, repomix.config.json, portless.json, system-prompt.slim.md
+```
 
 ## Sources
 
-- [Ollama — Claude Code integration](https://docs.ollama.com/integrations/claude-code) · [Anthropic API compatibility announcement](https://ollama.com/blog/claude)
-- [Ollama — OpenCode integration](https://docs.ollama.com/integrations/opencode) · [OpenCode provider docs](https://opencode.ai/docs/providers/) · [OpenCode model docs](https://opencode.ai/docs/models/)
-- [qwen3.5 tags](https://ollama.com/library/qwen3.5/tags) · [gemma4 tags](https://ollama.com/library/gemma4/tags)
-- [vercel-labs/portless](https://github.com/vercel-labs/portless) · [portless docs](https://mintlify.wiki/vercel-labs/portless/introduction)
-- Context-length guidance (32k floor / 64k sweet spot): [Claude Code with local LLMs](https://renezander.com/guides/claude-code-local-llm-anthropic-base-url/) · [Unsloth guide](https://unsloth.ai/docs/basics/claude-code)
+[Ollama × Claude Code](https://docs.ollama.com/integrations/claude-code) · [Anthropic-compat announcement](https://ollama.com/blog/claude) · [Ollama × OpenCode](https://docs.ollama.com/integrations/opencode) · [OpenCode providers](https://opencode.ai/docs/providers/) / [models](https://opencode.ai/docs/models/) / [config](https://opencode.ai/docs/config/) · [qwen3.5 tags](https://ollama.com/library/qwen3.5/tags) · [gemma4 tags](https://ollama.com/library/gemma4/tags) · [portless](https://github.com/vercel-labs/portless) · [repomix](https://repomix.com) · [Claude Code prompt investigation](http://www.mykolaaleksandrov.dev/posts/2026/06/claude-code-huge-prompt-investigation/) · [Unsloth local guide](https://unsloth.ai/docs/basics/claude-code) · [env vars](https://code.claude.com/docs/en/env-vars) · [settings](https://code.claude.com/docs/en/settings)

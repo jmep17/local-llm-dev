@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # setup.sh — installer for bash/zsh machines (work PC). Fish users: scripts/setup.fish.
-# Idempotent. Run from anywhere: ./scripts/setup.sh [--pull] [--portless]
+# Idempotent. Run from anywhere: ./scripts/setup.sh [--no-pull] [--portless]
 #
-#   (no flags)   install zsh functions hint + configs + create derived models
-#                from already-pulled bases (skips missing ones with a warning)
-#   --pull       also pull base models first (~16 GB default set)
+#   (no flags)   full install: pull missing base models (~16 GB first time),
+#                create derived models, link CLIs, install configs
+#   --no-pull    skip downloads (wrappers auto-pull on first use anyway)
 #   --portless   also npm install -g portless
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
-PULL=0
+PULL=1
 PORTLESS=0
 for a in "$@"; do
   case "$a" in
-    --pull) PULL=1 ;;
+    --pull) PULL=1 ;;      # default now; kept for compatibility
+    --no-pull) PULL=0 ;;
     --portless) PORTLESS=1 ;;
     *) echo "unknown flag: $a" >&2; exit 1 ;;
   esac
@@ -31,8 +32,12 @@ fi
 BASES="qwen3.5:9b qwen3.5:4b gemma4:e4b-it-qat"
 if [ "$PULL" -eq 1 ]; then
   for b in $BASES; do
-    echo "pulling $b ..."
-    ollama pull "$b"
+    if ollama show "$b" >/dev/null 2>&1; then
+      echo "$b already present"
+    else
+      echo "pulling $b ..."
+      ollama pull "$b"
+    fi
   done
 fi
 
@@ -63,7 +68,8 @@ mkdir -p "$HOME/.local/bin"
 ln -sf "$REPO/scripts/repomap.sh" "$HOME/.local/bin/repomap"
 ln -sf "$REPO/bin/cc-mcp" "$HOME/.local/bin/cc-mcp"
 ln -sf "$REPO/bin/cc-skill" "$HOME/.local/bin/cc-skill"
-echo "linked ~/.local/bin/{repomap,cc-mcp,cc-skill}"
+ln -sf "$REPO/bin/cc-ensure-model" "$HOME/.local/bin/cc-ensure-model"
+echo "linked ~/.local/bin/{repomap,cc-mcp,cc-skill,cc-ensure-model}"
 case ":$PATH:" in
   *":$HOME/.local/bin:"*) ;;
   *) echo "  note: add ~/.local/bin to PATH" ;;

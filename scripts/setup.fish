@@ -1,20 +1,22 @@
 #!/usr/bin/env fish
 # setup.fish — one-shot install for the local-model dev stack.
-# Idempotent. Run from the repo root: ./scripts/setup.fish [--pull] [--portless]
+# Idempotent. Run from the repo root: ./scripts/setup.fish [--no-pull] [--portless]
 #
-#   (no flags)   install fish functions + OpenCode config + create derived models
-#                from already-pulled bases (skips missing ones with a warning)
-#   --pull       also pull base models first (~16 GB total: qwen3.5:9b 6.6G,
-#                qwen3.5:4b 3.4G, gemma4:e4b-it-qat 6.1G)
+#   (no flags)   full install: pull missing base models (~16 GB first time:
+#                qwen3.5:9b 6.6G, qwen3.5:4b 3.4G, gemma4:e4b-it-qat 6.1G),
+#                create derived models, link functions + CLIs, install configs
+#   --no-pull    skip downloads (wrappers auto-pull on first use anyway)
 #   --portless   also npm install -g portless
 
 set -l repo (cd (dirname (status filename))/.. && pwd)
-set -l pull 0
+set -l pull 1
 set -l portless 0
 for a in $argv
     switch $a
         case --pull
-            set pull 1
+            set pull 1 # default now; kept for compatibility
+        case --no-pull
+            set pull 0
         case --portless
             set portless 1
         case '*'
@@ -39,8 +41,12 @@ end
 set -l bases qwen3.5:9b qwen3.5:4b gemma4:e4b-it-qat
 if test $pull -eq 1
     for b in $bases
-        echo "pulling $b ..."
-        ollama pull $b
+        if ollama show $b >/dev/null 2>&1
+            echo "$b already present"
+        else
+            echo "pulling $b ..."
+            ollama pull $b
+        end
     end
 end
 
@@ -81,7 +87,8 @@ mkdir -p ~/.local/bin
 ln -sf $repo/scripts/repomap.sh ~/.local/bin/repomap
 ln -sf $repo/bin/cc-mcp ~/.local/bin/cc-mcp
 ln -sf $repo/bin/cc-skill ~/.local/bin/cc-skill
-echo "linked ~/.local/bin/{repomap,cc-mcp,cc-skill}"
+ln -sf $repo/bin/cc-ensure-model ~/.local/bin/cc-ensure-model
+echo "linked ~/.local/bin/{repomap,cc-mcp,cc-skill,cc-ensure-model}"
 if not contains ~/.local/bin $PATH
     echo "  note: add ~/.local/bin to PATH if it isn't already"
 end

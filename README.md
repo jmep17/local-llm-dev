@@ -65,9 +65,22 @@ halves KV memory and is what makes 64k context viable next to a 6.6 GB model.
 
 ## Install
 
+Fish (personal Mac):
+
 ```fish
 ./scripts/setup.fish --pull --portless   # ~16 GB of downloads
 ```
+
+Zsh/bash (work PC — no fish needed):
+
+```sh
+./scripts/setup.sh --pull --portless
+# then add to ~/.zshrc (setup prints the exact line):
+#   source /path/to/local-llm-dev/shell/local-llm-dev.zsh
+```
+
+`shell/local-llm-dev.zsh` ports every function — `cc-local`, `cc-qwen`, `cc-gemma`,
+`cc-turbo`, `oc-local`, `cc-mode`, `ollama-tuned` — with identical behavior.
 
 Then:
 
@@ -116,6 +129,16 @@ models; all are overridden in the wrappers, `cc-mode`, and the settings template
 
 Also available but not defaulted: `claude --bare` strips hooks/plugins/MCP *and* CLAUDE.md —
 defeats the repomap strategy; one-off throwaway sessions only.
+
+**Locality guarantees (work-machine mode):** all wrappers and the `cc-mode` shadow pass
+`--strict-mcp-config --mcp-config ~/.config/local-llm-dev/mcp-local.json` — an MCP allowlist
+of exactly **context7** (docs lookup, remote by design) and **repomix** (local stdio). No other
+MCP server from your global config can receive code in local mode. The settings template also
+sets `"skipWebFetchPreflight": true` (WebFetch's domain safety check otherwise calls Anthropic
+even in local mode), and `repomap` auto-appends `.agents/` to the target repo's `.gitignore`
+so generated maps never land in history. Remaining outbound: npm package fetches on first use,
+OpenCode's models.dev catalog + update-notify pings, context7 queries. Model traffic itself is
+localhost-only — avoid `:cloud` Ollama tags on machines where that matters.
 
 OpenCode side (already in `config/opencode.json`): `"share": "disabled"` (no conversation
 uploads — work machine), `"autoupdate": "notify"`, and `"compaction": {"prune": true}` which

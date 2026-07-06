@@ -12,6 +12,13 @@ function cc-local --description "Claude Code against local Ollama (Anthropic-com
         return 1
     end
 
+    # MCP allowlist: only context7 (docs lookup) + repomix run in local mode — no other
+    # MCP servers get your code. --strict-mcp-config ignores all other MCP configs.
+    set -l mcp_flags
+    if test -f ~/.config/local-llm-dev/mcp-local.json
+        set mcp_flags --strict-mcp-config --mcp-config ~/.config/local-llm-dev/mcp-local.json
+    end
+
     # Tier mapping: opus/sonnet -> chosen model, haiku (background/fast tasks) -> qwen3.5-fast.
     # Overhead overrides (see README → 'Overhead overrides'):
     #   ATTRIBUTION_HEADER=0        per-request header line in system prompt kills KV cache (~90% slower prefill)
@@ -28,7 +35,7 @@ function cc-local --description "Claude Code against local Ollama (Anthropic-com
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
         CLAUDE_CODE_DISABLE_AGENT_VIEW=1 \
         API_TIMEOUT_MS=600000 \
-        claude --model $model --exclude-dynamic-system-prompt-sections $argv
+        claude --model $model --exclude-dynamic-system-prompt-sections $mcp_flags $argv
     # --exclude-dynamic-system-prompt-sections: moves per-request bits (cwd, git status,
     # env info) out of the system prompt -> byte-stable prefix -> KV cache hit every turn.
     # Harmlessly ignored when cc-turbo adds --system-prompt-file.

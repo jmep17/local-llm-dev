@@ -73,7 +73,8 @@ end
 # --- 3a. slim system prompt (used by cc-turbo) ---------------------------------
 mkdir -p ~/.config/local-llm-dev
 cp $repo/templates/system-prompt.slim.md ~/.config/local-llm-dev/system-prompt.slim.md
-echo "installed ~/.config/local-llm-dev/system-prompt.slim.md"
+cp $repo/config/mcp-local.json ~/.config/local-llm-dev/mcp-local.json
+echo "installed ~/.config/local-llm-dev/{system-prompt.slim.md,mcp-local.json}"
 
 # --- 3b. repomap on PATH (needed by the SessionStart hook + git hooks) --------
 mkdir -p ~/.local/bin

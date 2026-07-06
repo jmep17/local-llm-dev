@@ -29,8 +29,12 @@ function cc-mode --description "Toggle plain 'claude' between cloud and local Ol
             set -gx API_TIMEOUT_MS 600000
             # Shadow `claude` so plain invocations also get the cache-stable prompt flag
             # (env vars can't carry CLI flags). Removed by 'cc-mode cloud'.
-            function claude --wraps claude --description "claude (cc-mode local: cache-stable system prompt)"
-                command claude --exclude-dynamic-system-prompt-sections $argv
+            function claude --wraps claude --description "claude (cc-mode local: cache-stable prompt, MCP allowlist)"
+                set -l mcp_flags
+                if test -f ~/.config/local-llm-dev/mcp-local.json
+                    set mcp_flags --strict-mcp-config --mcp-config ~/.config/local-llm-dev/mcp-local.json
+                end
+                command claude --exclude-dynamic-system-prompt-sections $mcp_flags $argv
             end
             echo "claude → LOCAL ($model) in this shell. 'cc-mode cloud' to switch back."
         case cloud

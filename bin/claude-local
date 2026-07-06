@@ -20,6 +20,12 @@ if ! curl -sf --max-time 2 http://localhost:11434/api/version >/dev/null 2>&1; t
   exit 1
 fi
 
+# MCP allowlist (context7 + repomix only) when installed by setup
+MCP_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/local-llm-dev/mcp-local.json"
+if [ -f "$MCP_CONF" ]; then
+  set -- --strict-mcp-config --mcp-config "$MCP_CONF" "$@"
+fi
+
 exec env \
   ANTHROPIC_BASE_URL=http://localhost:11434 \
   ANTHROPIC_AUTH_TOKEN=ollama \

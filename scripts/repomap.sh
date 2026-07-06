@@ -54,6 +54,14 @@ fi
 
 mkdir -p .agents
 
+# Keep the generated map out of the target repo's history (structure leak on public repos).
+# Checks file content, not `git check-ignore` — that reports already-tracked paths as
+# not-ignored and would re-append forever.
+if [ ! -f .gitignore ] || ! grep -qxE '\.agents/?' .gitignore; then
+  printf '\n# generated agent context (local-llm-dev)\n.agents/\n' >> .gitignore
+  echo "repomap: added .agents/ to .gitignore"
+fi
+
 TEMPLATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../templates" && pwd)"
 
 # ---------------------------------------------------------------- repomix path

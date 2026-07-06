@@ -1,0 +1,5 @@
+# Main agent model: Qwen 3.5 9B — tools + thinking + vision, 64k working context.
+# Base tag is q4_K_M (6.6 GB). On a 16 GB M1 this leaves room for a ~64k KV cache
+# when the server runs with OLLAMA_KV_CACHE_TYPE=q8_0 (see fish/functions/ollama-tuned.fish).
+FROM qwen3.5:9b
+PARAMETER num_ctx 65536

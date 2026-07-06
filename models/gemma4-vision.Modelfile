@@ -1,0 +1,5 @@
+# Frontend/vision model: Gemma 4 E4B QAT (6.1 GB) — multimodal (text + image).
+# Use for UI screenshot review: paste a screenshot of the running app
+# (https://<name>.localhost via portless) and ask for layout/visual fixes.
+FROM gemma4:e4b-it-qat
+PARAMETER num_ctx 32768

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://repomix.com/schemas/latest/schema.json",
+  "output": {
+    "filePath": ".agents/repomap.md",
+    "style": "markdown",
+    "compress": true,
+    "fileSummary": false,
+    "directoryStructure": true,
+    "removeComments": true,
+    "removeEmptyLines": true,
+    "showLineNumbers": false,
+    "topFilesLength": 0,
+    "tokenBudget": 8000,
+    "git": { "sortByChanges": true }
+  },
+  "include": [
+    "app/**",
+    "src/**",
+    "lib/**",
+    "components/**",
+    "pages/**",
+    "package.json"
+  ],
+  "ignore": {
+    "useGitignore": true,
+    "customPatterns": [
+      "**/*.test.*",
+      "**/*.spec.*",
+      "**/*.stories.*",
+      "**/*.d.ts",
+      "**/*.css",
+      "**/*.svg",
+      "**/*.snap"
+    ]
+  },
+  "security": { "enableSecurityCheck": true }
+}

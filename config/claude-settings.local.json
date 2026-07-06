@@ -1,0 +1,34 @@
+{
+  "_comment": "Drop this into a project as .claude/settings.local.json to pin THAT project to local models — anyone opening the repo with plain `claude` gets Ollama automatically, no wrapper needed. Delete the file (or unset ANTHROPIC_BASE_URL) to go back to Anthropic cloud. Overhead overrides explained in local-llm-dev README → 'Overhead overrides'.",
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "repomap --if-stale >/dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ]
+  },
+  "includeGitInstructions": false,
+  "awaySummaryEnabled": false,
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:11434",
+    "ANTHROPIC_AUTH_TOKEN": "ollama",
+    "ANTHROPIC_API_KEY": "",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "qwen3.5-dev",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "qwen3.5-dev",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "qwen3.5-fast",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+    "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_DISABLE_AGENT_VIEW": "1",
+    "API_TIMEOUT_MS": "600000"
+  }
+}

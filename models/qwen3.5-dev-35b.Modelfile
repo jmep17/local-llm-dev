@@ -1,0 +1,6 @@
+# Optional tier for 48-64 GB machines: Qwen 3.5 35B MoE, only 3B active params
+# (24 GB q4_K_M) — near-27b quality at much higher tokens/sec. Best local agent
+# pick when RAM allows. Coding variant on Apple Silicon: qwen3.5:35b-a3b-coding-nvfp4 (22 GB).
+# Created by setup.fish only if the base tag is already pulled.
+FROM qwen3.5:35b-a3b
+PARAMETER num_ctx 65536

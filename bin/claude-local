@@ -1,0 +1,35 @@
+#!/bin/sh
+# claude-local [model] [claude args...]
+# Shell-agnostic wrapper (bash/zsh/fish/anything) — for machines without the
+# fish functions, e.g. a work PC. Env is scoped to this one invocation;
+# plain `claude` keeps using your normal cloud settings.
+#
+# Install: symlink somewhere on PATH, e.g.
+#   ln -s "$(pwd)/bin/claude-local" ~/.local/bin/claude-local
+
+MODEL=qwen3.5-dev
+if [ $# -gt 0 ]; then
+  case "$1" in
+    -*) ;;                      # first arg is a claude flag, keep default model
+    *) MODEL="$1"; shift ;;
+  esac
+fi
+
+if ! curl -sf --max-time 2 http://localhost:11434/api/version >/dev/null 2>&1; then
+  echo "claude-local: Ollama not reachable on :11434 — start it first" >&2
+  exit 1
+fi
+
+exec env \
+  ANTHROPIC_BASE_URL=http://localhost:11434 \
+  ANTHROPIC_AUTH_TOKEN=ollama \
+  ANTHROPIC_API_KEY= \
+  ANTHROPIC_DEFAULT_OPUS_MODEL="$MODEL" \
+  ANTHROPIC_DEFAULT_SONNET_MODEL="$MODEL" \
+  ANTHROPIC_DEFAULT_HAIKU_MODEL=qwen3.5-fast \
+  CLAUDE_CODE_ATTRIBUTION_HEADER=0 \
+  DISABLE_NON_ESSENTIAL_MODEL_CALLS=1 \
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+  CLAUDE_CODE_DISABLE_AGENT_VIEW=1 \
+  API_TIMEOUT_MS=600000 \
+  claude --model "$MODEL" --exclude-dynamic-system-prompt-sections "$@"

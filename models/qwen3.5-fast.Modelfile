@@ -1,0 +1,4 @@
+# Fast/small tier: Qwen 3.5 4B (3.4 GB) — used as the "haiku" tier by Claude Code
+# wrappers and as small_model by OpenCode (titles, summaries, quick edits).
+FROM qwen3.5:4b
+PARAMETER num_ctx 32768

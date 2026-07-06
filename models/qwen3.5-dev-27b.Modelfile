@@ -1,0 +1,6 @@
+# Optional tier for 32 GB+ machines: Qwen 3.5 27B q4_K_M (17 GB), 64k ctx.
+# Noticeably stronger coding than 9b. On Apple Silicon, consider the MLX coding
+# variant instead: FROM qwen3.5:27b-coding-nvfp4 (20 GB).
+# Created by setup.fish only if the base tag is already pulled.
+FROM qwen3.5:27b
+PARAMETER num_ctx 65536

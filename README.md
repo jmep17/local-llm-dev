@@ -179,6 +179,32 @@ KV-cache RAM and prefill time. The setup uses three layers:
 Also: keep the prompt prefix static (stable CLAUDE.md, no timestamps) so Ollama's KV cache
 reuses the prefill across turns — that's most of the perceived speed on Apple Silicon.
 
+## Adding MCPs and skills
+
+Both installed to `~/.local/bin` by setup, work from any shell:
+
+```sh
+# MCP allowlist (what local mode may talk to — everything else stays blocked)
+cc-mcp list
+cc-mcp add linear https://mcp.linear.app/mcp        # remote HTTP
+cc-mcp add playwright npx -y @playwright/mcp        # local stdio
+cc-mcp rm playwright
+
+# Skills
+cc-skill new my-review              # scaffold ~/.claude/skills/my-review/SKILL.md
+cc-skill new deploy --project       # scaffold into ./.claude/skills (this repo only)
+cc-skill add ~/some/skill-dir       # install a local skill dir
+cc-skill add https://github.com/user/skill-repo   # clone single skill or a collection
+cc-skill list
+```
+
+Changes take effect on the next launch. Two local-model budget rules: every allowlisted
+MCP server's *tool schemas* and every skill's *description line* load into each session's
+prompt — on a 64k model, a handful of fat MCP servers can eat 10%+ of the window, so keep
+the allowlist to what you use and write one-line skill descriptions. Adding a remote MCP
+(like linear above) is also an explicit locality decision: that server receives whatever
+the model sends it.
+
 ## Frontend loop with portless
 
 [Portless](https://github.com/vercel-labs/portless) (Vercel Labs) replaces `localhost:3000`

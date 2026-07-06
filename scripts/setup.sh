@@ -61,7 +61,9 @@ echo "installed $CFG/local-llm-dev/{system-prompt.slim.md,mcp-local.json}"
 # --- 4. repomap on PATH ----------------------------------------------------------
 mkdir -p "$HOME/.local/bin"
 ln -sf "$REPO/scripts/repomap.sh" "$HOME/.local/bin/repomap"
-echo "linked ~/.local/bin/repomap"
+ln -sf "$REPO/bin/cc-mcp" "$HOME/.local/bin/cc-mcp"
+ln -sf "$REPO/bin/cc-skill" "$HOME/.local/bin/cc-skill"
+echo "linked ~/.local/bin/{repomap,cc-mcp,cc-skill}"
 case ":$PATH:" in
   *":$HOME/.local/bin:"*) ;;
   *) echo "  note: add ~/.local/bin to PATH" ;;

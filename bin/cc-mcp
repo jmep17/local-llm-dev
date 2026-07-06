@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# cc-mcp — manage the local-mode MCP allowlist (~/.config/local-llm-dev/mcp-local.json).
+# Every wrapper passes this file with --strict-mcp-config, so an entry here is the ONLY
+# way an MCP server runs in local mode.
+#
+#   cc-mcp list                          show allowlisted servers
+#   cc-mcp add <name> <https-url>        add remote HTTP server
+#   cc-mcp add <name> <command> [args…]  add local stdio server
+#   cc-mcp rm <name>                     remove a server
+#
+# Examples:
+#   cc-mcp add linear https://mcp.linear.app/mcp
+#   cc-mcp add playwright npx -y @playwright/mcp
+set -euo pipefail
+
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/local-llm-dev/mcp-local.json"
+export CC_MCP_CONF="$CONF"
+
+cmd="${1:-list}"
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+  list|add|rm) ;;
+  -h|--help|help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  *) echo "cc-mcp: unknown command '$cmd' (list|add|rm)" >&2; exit 1 ;;
+esac
+
+python3 - "$cmd" "$@" <<'PY'
+import json, os, sys
+
+conf = os.environ["CC_MCP_CONF"]
+cmd, args = sys.argv[1], sys.argv[2:]
+
+data = {"mcpServers": {}}
+if os.path.exists(conf):
+    with open(conf) as f:
+        data = json.load(f)
+servers = data.setdefault("mcpServers", {})
+
+def save():
+    os.makedirs(os.path.dirname(conf), exist_ok=True)
+    with open(conf, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+
+if cmd == "list":
+    if not servers:
+        print(f"(empty allowlist — {conf})")
+    for name, s in servers.items():
+        if s.get("type") == "http" or "url" in s:
+            print(f"  {name:<14} http   {s['url']}")
+        else:
+            print(f"  {name:<14} stdio  {s['command']} {' '.join(s.get('args', []))}")
+
+elif cmd == "add":
+    if len(args) < 2:
+        sys.exit("usage: cc-mcp add <name> <https-url | command [args...]>")
+    name, first, rest = args[0], args[1], args[2:]
+    if first.startswith(("http://", "https://")):
+        servers[name] = {"type": "http", "url": first}
+    else:
+        servers[name] = {"command": first, "args": rest} if rest else {"command": first}
+    save()
+    print(f"added '{name}' — active on next cc-* / claude launch")
+
+elif cmd == "rm":
+    if not args:
+        sys.exit("usage: cc-mcp rm <name>")
+    if servers.pop(args[0], None) is None:
+        sys.exit(f"cc-mcp: no server named '{args[0]}'")
+    save()
+    print(f"removed '{args[0]}'")
+PY

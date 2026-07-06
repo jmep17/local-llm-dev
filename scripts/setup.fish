@@ -79,7 +79,9 @@ echo "installed ~/.config/local-llm-dev/{system-prompt.slim.md,mcp-local.json}"
 # --- 3b. repomap on PATH (needed by the SessionStart hook + git hooks) --------
 mkdir -p ~/.local/bin
 ln -sf $repo/scripts/repomap.sh ~/.local/bin/repomap
-echo "linked ~/.local/bin/repomap"
+ln -sf $repo/bin/cc-mcp ~/.local/bin/cc-mcp
+ln -sf $repo/bin/cc-skill ~/.local/bin/cc-skill
+echo "linked ~/.local/bin/{repomap,cc-mcp,cc-skill}"
 if not contains ~/.local/bin $PATH
     echo "  note: add ~/.local/bin to PATH if it isn't already"
 end

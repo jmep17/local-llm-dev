@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# cc-skill — scaffold and install Claude Code skills.
+#
+#   cc-skill new <name> [--project]   scaffold a skill (personal ~/.claude/skills,
+#                                     or ./.claude/skills with --project)
+#   cc-skill add <path|git-url>       install a skill dir or clone a skill repo
+#   cc-skill list                     list personal + project skills
+#
+# Skill = directory with SKILL.md (frontmatter: name + description). The description
+# line is loaded into EVERY session's prompt — keep it short; local models pay for
+# every skill you install.
+set -euo pipefail
+
+PERSONAL="$HOME/.claude/skills"
+cmd="${1:-list}"
+[ $# -gt 0 ] && shift
+
+scaffold() {
+  local name="$1" base="$2"
+  local dir="$base/$name"
+  if [ -e "$dir/SKILL.md" ]; then
+    echo "cc-skill: $dir/SKILL.md already exists" >&2
+    exit 1
+  fi
+  mkdir -p "$dir"
+  cat > "$dir/SKILL.md" <<EOF
+---
+name: $name
+description: WHAT it does + WHEN to trigger, one line. Loaded into every session — keep short.
+---
+
+# $name
+
+Instructions the model follows when this skill triggers.
+Keep them tight — local models have 32-64k context.
+
+## Steps
+1. ...
+EOF
+  echo "created $dir/SKILL.md — edit the description first, it controls triggering"
+}
+
+install_dir() {
+  local src="$1" name
+  name="$(basename "$src")"
+  if [ ! -f "$src/SKILL.md" ]; then
+    echo "cc-skill: $src has no SKILL.md" >&2
+    exit 1
+  fi
+  mkdir -p "$PERSONAL"
+  cp -R "$src" "$PERSONAL/$name"
+  echo "installed $name -> $PERSONAL/$name"
+}
+
+case "$cmd" in
+  new)
+    [ $# -ge 1 ] || { echo "usage: cc-skill new <name> [--project]" >&2; exit 1; }
+    name="$1"; shift
+    base="$PERSONAL"
+    [ "${1:-}" = "--project" ] && base="./.claude/skills"
+    scaffold "$name" "$base"
+    ;;
+  add)
+    [ $# -ge 1 ] || { echo "usage: cc-skill add <path|git-url>" >&2; exit 1; }
+    src="$1"
+    case "$src" in
+      http://*|https://*|git@*)
+        tmp="$(mktemp -d)"
+        trap 'rm -rf "$tmp"' EXIT
+        git clone -q --depth 1 "$src" "$tmp/repo"
+        if [ -f "$tmp/repo/SKILL.md" ]; then
+          # repo IS a single skill
+          name="$(basename "$src" .git)"
+          mkdir -p "$PERSONAL"
+          rm -rf "$tmp/repo/.git"
+          cp -R "$tmp/repo" "$PERSONAL/$name"
+          echo "installed $name -> $PERSONAL/$name"
+        else
+          # repo is a collection — install every dir containing a SKILL.md
+          found=0
+          while IFS= read -r sk; do
+            install_dir "$(dirname "$sk")"
+            found=1
+          done < <(find "$tmp/repo" -maxdepth 3 -name SKILL.md -not -path '*/.git/*')
+          [ "$found" -eq 1 ] || { echo "cc-skill: no SKILL.md found in repo" >&2; exit 1; }
+        fi
+        ;;
+      *)
+        install_dir "$src"
+        ;;
+    esac
+    ;;
+  list)
+    for base in "$PERSONAL" "./.claude/skills"; do
+      [ -d "$base" ] || continue
+      echo "$base:"
+      for sk in "$base"/*/SKILL.md; do
+        [ -f "$sk" ] || continue
+        desc="$(grep -m1 '^description:' "$sk" | cut -d: -f2- | sed 's/^ //' | cut -c1-80)"
+        printf '  %-20s %s\n' "$(basename "$(dirname "$sk")")" "$desc"
+      done
+    done
+    ;;
+  -h|--help|help)
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    echo "cc-skill: unknown command '$cmd' (new|add|list)" >&2
+    exit 1
+    ;;
+esac
